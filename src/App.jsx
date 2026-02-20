@@ -6,11 +6,12 @@ import {
   Dna,
   AlertTriangle,
   Activity,
-  Printer,
   ChevronRight,
+  Search,
   X,
   Check,
   FlaskConical,
+  Download,
 } from 'lucide-react';
 
 // Dados iniciais de simulação (Oncologia)
@@ -35,20 +36,30 @@ const App = () => {
     clinico: 'Dr. Roberto Calheiros',
   };
 
-  // Processamento do CSV colado
+  // Processamento do CSV colado com suporte a diferentes delimitadores
   const handleImportCSV = () => {
     try {
+      if (!csvText.trim()) return;
+
       const lines = csvText.trim().split('\n');
-      if (lines.length < 2) return;
+      if (lines.length < 2) {
+        alert('O CSV deve conter pelo menos o cabeçalho e uma linha de dados.');
+        return;
+      }
+
+      // Detecta se é vírgula ou ponto-e-vírgula
+      const header = lines[0];
+      const delimiter = header.includes(';') ? ';' : ',';
 
       const newData = lines.slice(1).map((line, index) => {
-        const columns = line.split(',');
+        const columns = line.split(delimiter);
         return {
           id: Date.now() + index,
           gene: columns[0]?.trim() || 'N/A',
           variant: columns[1]?.trim() || 'N/A',
           zygosity: columns[2]?.trim() || 'Desconhecida',
           acmg: columns[3]?.trim() || 'VUS',
+          impact: columns[4]?.trim() || 'N/A',
           drug: columns[5]?.trim() || 'N/A',
           response: columns[6]?.trim() || 'N/A',
         };
@@ -58,8 +69,17 @@ const App = () => {
       setShowImportModal(false);
       setCsvText('');
     } catch (err) {
-      console.error('Erro ao processar CSV');
+      console.error('Erro ao processar CSV', err);
     }
+  };
+
+  // Função para acionar o Print (que permite salvar como PDF organizado)
+  const handleDownloadPDF = () => {
+    // Muda para a visão de laudo antes de imprimir para garantir o layout correto
+    setView('report');
+    setTimeout(() => {
+      window.print();
+    }, 500);
   };
 
   // Estatísticas para o Dashboard
@@ -80,11 +100,36 @@ const App = () => {
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-64 bg-slate-900 text-white flex flex-col shrink-0">
+      {/* Estilos para Impressão Organizada */}
+      <style>{`
+        @media print {
+          aside, header, .no-print, button {
+            display: none !important;
+          }
+          main {
+            padding: 0 !important;
+            margin: 0 !important;
+            background: white !important;
+          }
+          .print-container {
+            box-shadow: none !important;
+            border: none !important;
+            width: 100% !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          body {
+            background: white !important;
+          }
+        }
+      `}</style>
+
+      {/* Sidebar - Oculta na impressão */}
+      <aside className="w-64 bg-slate-900 text-white flex flex-col shrink-0 no-print">
         <div className="p-6 flex items-center gap-3 border-b border-slate-800">
-          <div className="bg-blue-600 p-2 rounded-lg">
-            <Dna size={22} />
+          <div className="bg-blue-600 p-2 rounded-lg shadow-lg shadow-blue-500/20">
+            <Dna size={22} className="text-white" />
           </div>
           <span className="font-bold text-xl tracking-tight">GenoSUS</span>
         </div>
@@ -92,14 +137,14 @@ const App = () => {
         <nav className="flex-1 p-4 space-y-2">
           <button
             onClick={() => setView('dashboard')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${view === 'dashboard' ? 'bg-blue-600 shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${view === 'dashboard' ? 'bg-blue-600 shadow-lg text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
           >
             <LayoutDashboard size={20} />
             <span className="font-semibold text-sm">Dashboard</span>
           </button>
           <button
             onClick={() => setView('report')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${view === 'report' ? 'bg-blue-600 shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${view === 'report' ? 'bg-blue-600 shadow-lg text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
           >
             <FileText size={20} />
             <span className="font-semibold text-sm">Laudo Clínico</span>
@@ -107,13 +152,13 @@ const App = () => {
         </nav>
 
         <div className="p-4 mt-auto border-t border-slate-800">
-          <div className="bg-slate-800/50 p-4 rounded-xl mb-4">
+          <div className="bg-slate-800/50 p-4 rounded-xl mb-4 border border-slate-700">
             <p className="text-[10px] uppercase font-bold text-slate-500 mb-2">Amostra Ativa</p>
             <p className="text-xs font-mono font-bold text-blue-400">{patient.id}</p>
           </div>
           <button
             onClick={() => setShowImportModal(true)}
-            className="w-full py-3 bg-white text-slate-900 rounded-xl text-xs font-bold uppercase flex items-center justify-center gap-2 hover:bg-blue-50 transition-colors shadow-lg"
+            className="w-full py-3 bg-white text-slate-900 rounded-xl text-xs font-bold uppercase flex items-center justify-center gap-2 hover:bg-blue-50 transition-colors shadow-lg active:scale-95"
           >
             <Upload size={14} /> Importar CSV
           </button>
@@ -122,22 +167,27 @@ const App = () => {
 
       {/* Conteúdo Principal */}
       <main className="flex-1 overflow-y-auto">
-        <header className="bg-white border-b h-16 flex items-center justify-between px-8 sticky top-0 z-10">
+        <header className="bg-white/80 backdrop-blur-md border-b h-16 flex items-center justify-between px-8 sticky top-0 z-10 no-print">
           <div className="flex items-center gap-2 text-slate-400">
             <span className="text-xs font-bold uppercase tracking-wider">Bioinformática</span>
             <ChevronRight size={14} />
             <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-              {view === 'dashboard' ? 'Análise de Variantes' : 'Visualização de Laudo'}
+              {view === 'dashboard' ? 'Análise de Variantes' : 'Laudo Oficial'}
             </span>
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-slate-800 transition-shadow">
-            <Printer size={16} /> Exportar PDF
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={handleDownloadPDF}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-slate-800 transition-all shadow-md active:scale-95"
+            >
+              <Download size={16} /> Baixar PDF Organizado
+            </button>
+          </div>
         </header>
 
         <div className="p-8 max-w-6xl mx-auto">
           {view === 'dashboard' ? (
-            <div className="space-y-6">
+            <div className="space-y-6 animate-in fade-in duration-500">
               {/* Cards de Resumo */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
@@ -145,7 +195,7 @@ const App = () => {
                     <FlaskConical size={24} />
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400 font-bold uppercase">Variantes</p>
+                    <p className="text-xs text-slate-400 font-bold uppercase">Variantes Analisadas</p>
                     <p className="text-2xl font-black">{stats.total}</p>
                   </div>
                 </div>
@@ -163,8 +213,8 @@ const App = () => {
                     <Activity size={24} />
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400 font-bold uppercase">Alvos Farmaco</p>
-                    <p className="text-2xl font-black">{data.filter((d) => d.drug !== 'N/A').length}</p>
+                    <p className="text-xs text-slate-400 font-bold uppercase">Farmacogenômica</p>
+                    <p className="text-2xl font-black">{data.filter((d) => d.drug && d.drug !== 'N/A').length}</p>
                   </div>
                 </div>
               </div>
@@ -172,7 +222,9 @@ const App = () => {
               {/* Tabela e Gráfico */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                  <h3 className="font-bold text-slate-800 mb-6">Patogenicidade</h3>
+                  <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
+                    <Activity size={18} className="text-blue-600" /> Patogenicidade
+                  </h3>
                   <div className="flex flex-col items-center">
                     <div className="relative w-32 h-32 mb-6">
                       <svg viewBox="0 0 36 36" className="w-full h-full transform -rotate-90">
@@ -185,44 +237,47 @@ const App = () => {
                           stroke="#ef4444"
                           strokeWidth="4"
                           strokeDasharray={`${stats.perc} 100`}
+                          strokeLinecap="round"
                         />
                       </svg>
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-2xl font-black">{stats.perc}%</span>
+                        <span className="text-2xl font-black text-slate-800">{stats.perc}%</span>
                       </div>
                     </div>
                     <div className="w-full space-y-2">
-                      <div className="flex justify-between text-xs font-bold">
-                        <span className="text-red-500">PATOGÉNICA</span>
+                      <div className="flex justify-between text-[10px] font-black tracking-widest uppercase">
+                        <span className="text-red-500">Patogênico</span>
                         <span>{stats.patogenica}</span>
                       </div>
                       <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-red-500" style={{ width: `${stats.perc}%` }}></div>
+                        <div className="h-full bg-red-500 rounded-full transition-all duration-1000" style={{ width: `${stats.perc}%` }}></div>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                  <div className="p-6 border-b flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800">Lista de Variantes Detectadas</h3>
+                <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+                  <div className="p-6 border-b flex justify-between items-center bg-slate-50/50">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                      <Search size={18} className="text-blue-600" /> Lista de Variantes
+                    </h3>
                   </div>
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto flex-1">
                     <table className="w-full text-left text-sm">
-                      <thead className="bg-slate-50 text-slate-400 text-[10px] font-bold uppercase">
+                      <thead className="bg-slate-50 text-slate-400 text-[10px] font-bold uppercase tracking-wider">
                         <tr>
-                          <th className="py-3 px-6">Gene</th>
-                          <th className="py-3 px-6">HGVSc</th>
-                          <th className="py-3 px-6">Classificação</th>
+                          <th className="py-4 px-6 border-b">Gene</th>
+                          <th className="py-4 px-6 border-b">Variante (HGVSc)</th>
+                          <th className="py-4 px-6 border-b">Classificação</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
                         {data.map((m) => (
-                          <tr key={m.id} className="hover:bg-slate-50 transition-colors">
-                            <td className="py-4 px-6 font-bold text-blue-600">{m.gene}</td>
-                            <td className="py-4 px-6 font-mono text-xs">{m.variant}</td>
+                          <tr key={m.id} className="hover:bg-blue-50/30 transition-colors group">
+                            <td className="py-4 px-6 font-bold text-blue-700">{m.gene}</td>
+                            <td className="py-4 px-6 font-mono text-xs text-slate-500">{m.variant}</td>
                             <td className="py-4 px-6">
-                              <span className={`px-2 py-1 rounded-md text-[10px] font-bold border uppercase ${getAcmgBadge(m.acmg)}`}>
+                              <span className={`px-2 py-1 rounded-md text-[10px] font-bold border uppercase tracking-tighter ${getAcmgBadge(m.acmg)}`}>
                                 {m.acmg}
                               </span>
                             </td>
@@ -235,99 +290,144 @@ const App = () => {
               </div>
             </div>
           ) : (
-            /* Laudo Visual */
-            <div className="bg-white shadow-2xl mx-auto max-w-[800px] min-h-[1000px] p-12 border-t-[12px] border-slate-900 rounded-t-lg">
-              <div className="flex justify-between border-b pb-8 mb-8">
-                <div>
-                  <h1 className="text-3xl font-black text-slate-900 tracking-tighter">GenoSUS</h1>
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Relatório de Sequenciamento Genómico</p>
+            /* Laudo Visual - Container de Impressão */
+            <div className="print-container bg-white shadow-2xl mx-auto max-w-[850px] min-h-[1100px] p-12 md:p-16 border-t-[16px] border-slate-900 rounded-t-lg animate-in slide-in-from-bottom-4 duration-700 relative">
+              <div className="flex justify-between border-b-2 border-slate-100 pb-10 mb-10">
+                <div className="flex items-center gap-4">
+                  <div className="bg-slate-900 p-3 rounded-xl text-white">
+                    <Dna size={32} />
+                  </div>
+                  <div>
+                    <h1 className="text-4xl font-black text-slate-900 tracking-tighter">GenoSUS</h1>
+                    <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Bioinformática do Sistema Único de Saúde</p>
+                  </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs font-bold">ID: {patient.id}</p>
-                  <p className="text-xs text-slate-400">{patient.dataExame}</p>
+                  <div className="bg-red-50 text-red-600 px-3 py-1 rounded-full text-[10px] font-black uppercase mb-2 inline-block border border-red-100">Documento Oficial</div>
+                  <p className="text-xs font-bold text-slate-800">ID: {patient.id}</p>
+                  <p className="text-xs text-slate-400 font-medium">{patient.dataExame}</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-8 mb-10 bg-slate-50 p-6 rounded-xl border">
+              <div className="grid grid-cols-2 gap-10 mb-12 bg-slate-50 p-8 rounded-2xl border border-slate-100">
                 <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Paciente</p>
-                  <p className="font-bold">{patient.nome}</p>
-                  <p className="text-xs text-slate-500">Idade: {patient.idade}</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase mb-3 tracking-widest">Informações do Paciente</p>
+                  <div className="space-y-1">
+                    <p className="text-xl font-black text-slate-900">{patient.nome}</p>
+                    <p className="text-sm font-medium">
+                      Idade: <span className="text-slate-500">{patient.idade}</span>
+                    </p>
+                    <p className="text-sm font-medium">
+                      Amostra: <span className="font-mono text-blue-600 font-bold">{patient.id}</span>
+                    </p>
+                  </div>
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Médico Solicitante</p>
-                  <p className="font-bold">{patient.clinico}</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase mb-3 tracking-widest">Informações Clínicas</p>
+                  <div className="space-y-1 text-sm">
+                    <p className="font-medium text-slate-700">
+                      Médico Solicitante: <span className="text-slate-900 font-bold">{patient.clinico}</span>
+                    </p>
+                    <p className="font-medium text-slate-700">
+                      Metodologia: <span className="text-slate-900 font-bold">NGS - Cobertura 100x</span>
+                    </p>
+                    <p className="font-medium text-slate-700">
+                      Data de Emissão: <span className="text-slate-900 font-bold">{patient.dataExame}</span>
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              <div className="mb-10">
-                <h3 className="font-black text-slate-900 uppercase text-xs mb-4 border-b pb-2">Interpretação Clínica</h3>
-                <p className="text-sm leading-relaxed text-slate-600 italic">
-                  Foram identificadas variantes genéticas associadas a risco aumentado de patologias oncológicas. A variante
-                  {' '}
-                  {data[0]?.gene}
-                  {' '}
-                  {data[0]?.variant}
-                  {' '}
-                  é classificada como patogénica conforme critérios ACMG.
-                </p>
+              <div className="mb-12">
+                <h3 className="font-black text-slate-900 uppercase text-xs mb-4 flex items-center gap-2">
+                  <div className="w-1.5 h-4 bg-blue-600 rounded-full"></div> 1. Interpretação Clínica e Resumo
+                </h3>
+                <div className="bg-blue-50/30 p-6 rounded-2xl border border-blue-100/50 leading-relaxed text-slate-700 text-sm italic">
+                  A análise de sequenciamento de nova geração (NGS) da amostra <span className="font-bold text-slate-900">{patient.id}</span> revelou a presença de variantes com impacto clínico significativo. Destaca-se a variante patogênica no gene <span className="font-bold text-red-600 underline decoration-red-200">{data[0]?.gene}</span> ({data[0]?.variant}), classificada como Classe 5 (Patogênica) segundo os critérios ACMG. Esta variante está associada a sensibilidade terapêutica específica, conforme detalhado na seção farmacogenômica.
+                </div>
               </div>
 
-              <div>
-                <h3 className="font-black text-slate-900 uppercase text-xs mb-4 border-b pb-2">Tabela de Variantes Clínicas</h3>
-                <table className="w-full text-left text-sm border-collapse">
-                  <thead>
-                    <tr className="bg-slate-900 text-white">
-                      <th className="py-2 px-4">Gene</th>
-                      <th className="py-2 px-4">Variante</th>
-                      <th className="py-2 px-4">Classificação</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {data
-                      .filter((m) => m.acmg.toLowerCase().includes('patogênica'))
-                      .map((m, i) => (
-                        <tr key={i}>
-                          <td className="py-3 px-4 font-bold">{m.gene}</td>
-                          <td className="py-3 px-4 font-mono">{m.variant}</td>
-                          <td className="py-3 px-4 text-red-600 font-bold uppercase text-[10px]">{m.acmg}</td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
+              <div className="mb-12">
+                <h3 className="font-black text-slate-900 uppercase text-xs mb-6 flex items-center gap-2 tracking-widest">
+                  <div className="w-1.5 h-4 bg-blue-600 rounded-full"></div> 2. Variantes de Significado Clínico
+                </h3>
+                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-left text-sm border-collapse">
+                    <thead>
+                      <tr className="bg-slate-900 text-white">
+                        <th className="py-4 px-6 uppercase text-[10px] font-black">Gene</th>
+                        <th className="py-4 px-6 uppercase text-[10px] font-black">Variante (HGVSc)</th>
+                        <th className="py-4 px-6 uppercase text-[10px] font-black">Zigosidade</th>
+                        <th className="py-4 px-6 uppercase text-[10px] font-black">ACMG</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {data
+                        .filter((m) => m.acmg.toLowerCase().includes('patogênica'))
+                        .map((m, i) => (
+                          <tr key={i} className="hover:bg-slate-50 transition-colors">
+                            <td className="py-4 px-6 font-black text-slate-900">{m.gene}</td>
+                            <td className="py-4 px-6 font-mono text-xs text-blue-700">{m.variant}</td>
+                            <td className="py-4 px-6 text-slate-500 font-medium">{m.zygosity}</td>
+                            <td className="py-4 px-6">
+                              <span className="text-red-600 font-black uppercase text-[10px] tracking-tight">{m.acmg}</span>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="mt-auto pt-16 grid grid-cols-2 gap-16 border-t-2 border-slate-100">
+                <div className="text-[10px] text-slate-400 leading-relaxed uppercase tracking-tighter font-bold">
+                  <p className="font-black mb-2 text-slate-500">Notas Metodológicas</p>
+                  <p>Pipeline: GenoSUS v2.1 | Alinhador: BWA-MEM | Variant Caller: GATK v4.2 | Anotação: ClinVar & SnpEff. Filtros de qualidade: Profundidade &gt; 30x, Qualidade &gt; 20.</p>
+                </div>
+                <div className="text-center">
+                  <div className="w-full border-b-2 border-slate-900 mb-3 h-10"></div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-900">Assinatura do Bioinformata Responsável</p>
+                  <p className="text-[9px] text-slate-400 font-bold">Conselho Regional de Biologia - Registro Ativo</p>
+                </div>
               </div>
             </div>
           )}
         </div>
       </main>
 
-      {/* Modal de Importação */}
+      {/* Modal de Importação com suporte a CSV robusto */}
       {showImportModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden">
-            <div className="p-6 border-b flex justify-between items-center">
-              <h3 className="text-lg font-bold">Importar Dados CSV</h3>
-              <button onClick={() => setShowImportModal(false)}>
-                <X size={20} />
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-50 flex items-center justify-center p-4 no-print animate-in fade-in duration-300">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden border border-white/20">
+            <div className="p-8 border-b flex justify-between items-center bg-slate-50/50">
+              <div>
+                <h3 className="text-xl font-black text-slate-900 tracking-tight">Importar Dados Brutos</h3>
+                <p className="text-sm text-slate-500 font-medium">Formato: gene, variante, zigosidade, classificação, impacto, medicamento, resposta</p>
+              </div>
+              <button
+                onClick={() => setShowImportModal(false)}
+                className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400 hover:text-slate-800"
+              >
+                <X size={24} />
               </button>
             </div>
-            <div className="p-6">
-              <p className="text-sm text-slate-500 mb-4">Cole as linhas do seu CSV abaixo (incluindo o cabeçalho):</p>
+            <div className="p-8">
               <textarea
-                className="w-full h-48 p-4 border rounded-xl font-mono text-xs bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none"
-                placeholder="gene,variante,zigosidade,acmg,impacto,medicamento,resposta"
+                className="w-full h-64 p-6 border-2 border-slate-100 rounded-2xl font-mono text-xs bg-slate-50 focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all"
+                placeholder="gene,variante,zigosidade,acmg,impacto,medicamento,resposta&#10;BRCA1,c.5266dup,Heterozigoto,Patogênica,High,Olaparibe,Sensível..."
                 value={csvText}
                 onChange={(e) => setCsvText(e.target.value)}
               />
-              <div className="mt-6 flex justify-end gap-3">
-                <button onClick={() => setShowImportModal(false)} className="px-4 py-2 font-bold text-slate-500">
+              <div className="mt-8 flex justify-end gap-4">
+                <button onClick={() => setShowImportModal(false)} className="px-6 py-3 font-bold text-slate-400 hover:text-slate-600 transition-colors">
                   Cancelar
                 </button>
                 <button
                   onClick={handleImportCSV}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold shadow-lg hover:bg-blue-700 transition-all flex items-center gap-2"
+                  disabled={!csvText.trim()}
+                  className="px-8 py-3 bg-blue-600 text-white rounded-xl font-black shadow-xl shadow-blue-500/30 hover:bg-blue-700 transition-all flex items-center gap-2 disabled:opacity-50 active:scale-95"
                 >
-                  <Check size={18} /> Processar
+                  <Check size={18} /> Processar Variantes
                 </button>
               </div>
             </div>
